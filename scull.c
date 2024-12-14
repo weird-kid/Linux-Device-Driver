@@ -4,27 +4,36 @@
 #include<linux/errno.h>
 #include<asm/uaccess.h>
 #include<linux/slab.h>
+#include<linux/cdev.h>
+#include<linux/kernel.h>
+#include<linux/types.h>
 MODULE_LICENSE("GPL");
 #define scull_major 50
 #define THIS_MODULE "scull"
 
-void check(int, char*);
+void check_else(int, char*);
 int scull_init(void);
 void scull_exit(void);
-void scull_chrdev_setup(void);
+void scull_chrdev_setup(struct scull_dev*, int);
 int  scull_open(struct inode *, strut file *);
 int scull_read(struct file *, char __user *, size_t , loff_t *);
 int  scull_write(struct file *, char __user *, size_t, loff_t *);
-struct qset*  scull_follow(struct scull_dev *, int );
+struct qset*  scull_follow(struct scull_dev*,int);
+void scull_trim(struct scull_dev *);
+
+struct scull_qset{
+	void **data;
+	struct scull_qset *next;
+};
 
 struct file_operations scull_fops {                           
-	.open = scull_open;
-	.release = scull_release;
-	.read = scull_read;
-	.write = scull_write;
-	.ioctl = scull_ioctl;
-	.owner  = THIS_MODULE;                               
-	.llseek = scull_llseek;
+	.open = scull_open,
+	.release = scull_release,
+	.read = scull_read,
+	.write = scull_write,
+	.ioctl = scull_ioctl,
+	.owner  = THIS_MODULE,                               
+	.llseek = scull_llseek,
 };
 
 struct scull_dev {
@@ -40,8 +49,23 @@ struct scull_dev {
 dev_t dev = MKDEV(scull_major, 0);
 struct cdev *chr_dev; 
 
+/* It iterates the qset and frees any quantumd data it finds */
+
+void scull_trim(struct scull_dev *dev){	
+	
+	qs = dev->data;
+	while(qs){
+		while(qs->data){
+			kfree(qs->data);
+			qs->data = qs->data + sizeof(char *);
+		}
+		qs = qs->next;
+	}
+	dev.size = 0;
+	dev.data = NULL;
+}
 int scull_init() {
-	check_else( register_chrdev_region(dev, 4, "scull"), "Char dev not registered properly" );
+	check_else( register_chrdev_region(dev, 4, "scull"), "Char dev not registered properly\n" );
 	scull_chdev_setup();
 
 	return 0;
@@ -60,19 +84,16 @@ int scull_open(struct inode *inode, struct file *flip){
 	return 0;
 	}
 
-void scull_release(struct inode* inode, struct file *flip){
-
+int scull_release(struct inode* inode, struct file *flip){
 	return 0;
 }
 
 void scull_chdev_setup(struct scull_dev *s_dev, int index){
 	int err, usrdev_no = MKDIR(scull_major, 0 + index);
-
 	cdev_init(&s_dev->cdev, &scull_fops);
-
 	s_dev->cdev.owner = THIS_MODULE;
 	s_dev->cdev.ops =  &scull_fops;
-	check_else( cdev_add(&s_dev->cdev, devno, 1), "Error adding chr_dev at specified dev_no");
+	check_else( cdev_add(&s_dev->cdev, devno, 1), "Error adding chr_dev at specified dev_no\n");
 	}
 
 int  scull_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos){
@@ -86,7 +107,7 @@ int  scull_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_
 	ssize_t relval = 0;
 	int item,rest,s_pos, q_pos;
 
-	if(down_interruptible(&dev->sem)
+	if(down_interruptible(&dev->sem))
 		return -ERESTARTSYS;
 
 	// If the first byte to be read  beyond EOF 	
@@ -105,7 +126,6 @@ int  scull_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_
 	
 	//dptr should point to current itemno
 	dptr = scull_follow(dev, item);
-
 	if (!dptr || !dptr->data || !dptr->data[s_pos])
 		goto out;
 	
@@ -116,12 +136,9 @@ int  scull_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_
 	}
 	*f_pos += count;
 	retval = count;
-
 	out :   up(&dev->sem); 
 		return retval;
-
 }
-
 
 int scull_write(struct file *filp, char __user *buffer, ssize_t count, loff_t *f_pos){
 
@@ -152,7 +169,7 @@ int scull_write(struct file *filp, char __user *buffer, ssize_t count, loff_t *f
 	}
 
 	if(!dptr->data[s_pos]){
-		dptr->data[s_pos] = kmalloc(qset*sizeof(char *), GFP_KERNEL);
+		dptr->data[s_pos] = kmalloc(qset, GFP_KERNEL);
 		if(!dptr->data[s_pos]{
 			goto out;
 		}
@@ -178,7 +195,29 @@ int scull_write(struct file *filp, char __user *buffer, ssize_t count, loff_t *f
 
 }
 
-	
+struct scull_qset * scull_follow(struct scull_dev* dev,int count){
+	struct scull_qset * qs = dev->data;
+	int size = sizeof(struct scull_qset)
+
+	/*intialize the first qset */
+	if(!qs){
+		qs = (struct qset *)kmalloc( size, GFP_KERNEL);
+		if(!qs)
+			return NULL;
+		memset(qs, 0, sizeof(struct scull_qset));
+	}
+
+	 while(count--){
+		 if(qs->next){
+			 qs->next = (struct scull_qset *)kmalloc(size, GFP_KERNEL);
+			 if(!qs->next)
+				 return NULL;
+			memset(gs->next, 0, size);
+		 }
+		 qs = qs->next;
+	 }
+	 return qs;
+}
 
 void  scull_exit() {
 	if (chr_dev)
