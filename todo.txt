@@ -1,0 +1,9 @@
+
+1. So, the first error was because he didn't use a function prototype can called a function before it was actually declared.
+    Okay I think I understood something new
+    So, if you call a function before its declaration it assumes it returns a int value and guess parameter data types based on called function
+    , and then we it's not a int value, C compiler is confused and 
+    returns "conflicting type" error 
+    !
+
+
