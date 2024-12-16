@@ -7,18 +7,20 @@
 #include<linux/cdev.h>
 #include<linux/kernel.h>
 #include<linux/types.h>
+#include "scull.h"
 MODULE_LICENSE("GPL");
 #define scull_major 50
 
+/*
 void check_else(int, char*);
 int scull_init(void);
 void scull_exit(void);
 void scull_chrdev_setup(struct scull_dev*, int);
 int  scull_open(struct inode*, struct file*);
 ssize_t scull_read(struct file*, char __user*, size_t , loff_t*);
-ssize_t scull_write(struct file*, char __user*, size_t, loff_t*);
-struct scull_qset* scull_follow(struct scull_dev*, int);
-int scull_trim(struct scull_dev*);
+ssize_t scull_write(struct file*,const char __user*, size_t, loff_t*);
+struct scull_qset* scull_follow(struct scull_dev*, int );
+void scull_trim(struct scull_dev*);
 int scull_release(struct inode*, struct file*);
 
 struct scull_qset{
@@ -26,6 +28,7 @@ struct scull_qset{
 	struct scull_qset *next;
 };
 
+*/
 struct file_operations scull_fops =  {                           
 	.open = scull_open,
 	.release = scull_release,
@@ -35,7 +38,7 @@ struct file_operations scull_fops =  {
 	.owner  = THIS_MODULE,                               
 	//.llseek = scull_llseek,
 };
-
+/*
 struct scull_dev {
 	struct scull_qset* data;
 	unsigned long size;
@@ -46,13 +49,15 @@ struct scull_dev {
 	struct cdev cdev;
 };
 
+*/
+
 dev_t dev = MKDEV(scull_major, 0);
 struct cdev* chr_dev; 
 
 
 /* It iterates the qset and frees any quantumd data it finds */
 
-int scull_trim(struct scull_dev* dev){	
+void  scull_trim(struct scull_dev *dev){	
     int qset = dev->qset;
     struct scull_qset* dptr;     
     int i;
@@ -68,15 +73,14 @@ int scull_trim(struct scull_dev* dev){
     dev->size = 0;
     dev->data = NULL;
    
-    return 0;
 }
 
 
 
 int scull_init() {
-    struct scull_dev* dev;
+    struct scull_dev* sdev = NULL;
 	check_else(register_chrdev_region(dev, 4, "scull"), "Char dev not registered properly\n" );
-	scull_chrdev_setup(dev, 0);
+	scull_chrdev_setup(sdev, 0);
 
 	return 0;
 }
@@ -87,7 +91,7 @@ int scull_open(struct inode* inode, struct file* flip){
 	dev = container_of(inode->i_cdev, struct scull_dev, cdev);                                     /* Check in ./Doc */
 	flip->private_data = dev;
 
-	if(flip->f_flags & O_ACCMODE == O_WRONLY){
+	if((flip->f_flags) & (O_ACCMODE == O_WRONLY)){
 		scull_trim(dev);
 	}
 	
@@ -99,11 +103,11 @@ int scull_release(struct inode* inode, struct file* flip){
 }
 
 void scull_chrdev_setup(struct scull_dev* s_dev, int index){
-	int err, usrdev_no = MKDIR(scull_major, 0 + index);
+	dev_t devno = MKDEV(scull_major, 0 + index);
 	cdev_init(&s_dev->cdev, &scull_fops);
 	s_dev->cdev.owner = THIS_MODULE;
 	s_dev->cdev.ops =  &scull_fops;
-	check_else( cdev_add(&s_dev->cdev, devno, 1), "Error adding chr_dev at specified dev_no\n");
+	check_else(cdev_add(&s_dev->cdev, devno, 1), "Error adding chr_dev at specified devno\n");
 	}
 
 ssize_t  scull_read(struct file* flip, char __user* buffer, size_t count, loff_t* f_pos){
@@ -112,7 +116,7 @@ ssize_t  scull_read(struct file* flip, char __user* buffer, size_t count, loff_t
 	struct scull_dev* dev = flip->private_data;
 	int quantum = dev->quantum;
 	int qset = dev->qset;
-	int itemsize = quantum*q_set;
+	int itemsize = quantum*qset;
 	struct scull_qset* dptr ;
 	ssize_t retval = 0;
 	int item,rest,s_pos, q_pos;
@@ -150,7 +154,7 @@ ssize_t  scull_read(struct file* flip, char __user* buffer, size_t count, loff_t
 		    return retval;
 }
 
-ssize_t scull_write(struct file* flip, char __user* buffer, ssize_t count, loff_t* f_pos){
+ssize_t scull_write(struct file* flip, const char __user *buffer, size_t count, loff_t* f_pos){
 
 	struct scull_dev* dev = flip->private_data;
 	int quantum = dev->quantum; int qset = dev->qset;
